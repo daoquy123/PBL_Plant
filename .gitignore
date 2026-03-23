@@ -1,0 +1,18 @@
+.venv/
+.venv-1/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local/build artifacts
+*.log
+*.tmp
+
+# Data and trained artifacts
+dataset/
+data test/
+models/
