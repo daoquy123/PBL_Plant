@@ -21,7 +21,8 @@ TRAIN_DIR = os.path.join(DATA_ROOT, "train")
 VAL_DIR = os.path.join(DATA_ROOT, "val")
 
 BATCH_SIZE = 32
-EPOCHS = 30
+EPOCHS_STAGE1 = 30
+EPOCHS_STAGE2 = 20
 AUTOTUNE = tf.data.AUTOTUNE
 VAL_SPLIT = 0.2
 SPLIT_SEED = 123
@@ -32,6 +33,125 @@ CHECKPOINT_DIR = os.path.join(PROJECT_ROOT, "checkpoints")
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 BEST_WEIGHTS_PATH = os.path.join(CHECKPOINT_DIR, "vgg16_cbam_best.weights.h5")
 HISTORY_JSON_PATH = os.path.join(CHECKPOINT_DIR, "training_history.json")
+
+# Ưu tiên "không bỏ sót sâu": phạt mạnh lỗi la_sau -> la_khoe
+LA_KHOE_IDX = CLASS_NAMES.index("la_khoe")
+LA_SAU_IDX = CLASS_NAMES.index("la_sau")
+
+
+class _ClassSpecificBase(tf.keras.metrics.Metric):
+    """Metric TP/FP/FN cho 1 lớp cụ thể (không dùng confusion-matrix nội bộ của Keras)."""
+
+    def __init__(self, class_id: int, name: str, dtype=tf.float32):
+        super().__init__(name=name, dtype=dtype)
+        self.class_id = int(class_id)
+        self.eps = tf.constant(1e-8, dtype=dtype)
+
+    def _to_label(self, y_pred: tf.Tensor) -> tf.Tensor:
+        # Model output: softmax probabilities [B, C]
+        return tf.argmax(y_pred, axis=-1, output_type=tf.int32)
+
+    def _to_true(self, y_true: tf.Tensor) -> tf.Tensor:
+        return tf.cast(tf.reshape(y_true, [-1]), tf.int32)
+
+
+class RecallLaSau(_ClassSpecificBase):
+    """Recall cho lớp la_sau: TP/(TP+FN)."""
+
+    def __init__(self, class_id: int, name: str = "recall_la_sau"):
+        super().__init__(class_id=class_id, name=name)
+        self.tp = self.add_weight(name="tp", initializer="zeros")
+        self.fn = self.add_weight(name="fn", initializer="zeros")
+
+    def update_state(self, y_true: tf.Tensor, y_pred: tf.Tensor, sample_weight=None):
+        y_t = self._to_true(y_true)
+        y_p = self._to_label(y_pred)
+        # TP: đúng la_sau; FN: la_sau nhưng dự đoán != la_sau
+        tp_mask = tf.logical_and(tf.equal(y_t, self.class_id), tf.equal(y_p, self.class_id))
+        fn_mask = tf.logical_and(tf.equal(y_t, self.class_id), tf.not_equal(y_p, self.class_id))
+        tp = tf.reduce_sum(tf.cast(tp_mask, self.dtype))
+        fn = tf.reduce_sum(tf.cast(fn_mask, self.dtype))
+        self.tp.assign_add(tp)
+        self.fn.assign_add(fn)
+
+    def result(self):
+        return self.tp / (self.tp + self.fn + self.eps)
+
+    def reset_state(self):
+        self.tp.assign(0.0)
+        self.fn.assign(0.0)
+
+
+class PrecisionLaSau(_ClassSpecificBase):
+    """Precision cho lớp la_sau: TP/(TP+FP)."""
+
+    def __init__(self, class_id: int, name: str = "precision_la_sau"):
+        super().__init__(class_id=class_id, name=name)
+        self.tp = self.add_weight(name="tp", initializer="zeros")
+        self.fp = self.add_weight(name="fp", initializer="zeros")
+
+    def update_state(self, y_true: tf.Tensor, y_pred: tf.Tensor, sample_weight=None):
+        y_t = self._to_true(y_true)
+        y_p = self._to_label(y_pred)
+        # TP: dự đoán la_sau và đúng la_sau; FP: dự đoán la_sau nhưng true != la_sau
+        tp_mask = tf.logical_and(tf.equal(y_t, self.class_id), tf.equal(y_p, self.class_id))
+        fp_mask = tf.logical_and(tf.not_equal(y_t, self.class_id), tf.equal(y_p, self.class_id))
+        tp = tf.reduce_sum(tf.cast(tp_mask, self.dtype))
+        fp = tf.reduce_sum(tf.cast(fp_mask, self.dtype))
+        self.tp.assign_add(tp)
+        self.fp.assign_add(fp)
+
+    def result(self):
+        return self.tp / (self.tp + self.fp + self.eps)
+
+    def reset_state(self):
+        self.tp.assign(0.0)
+        self.fp.assign(0.0)
+
+
+def _augment_train_batch(images: tf.Tensor, labels: tf.Tensor) -> tuple[tf.Tensor, tf.Tensor]:
+    """Augmentation nhẹ cho train để giảm overfit và tăng robust."""
+    x = tf.cast(images, tf.float32)
+    x = tf.image.random_flip_left_right(x)
+    x = tf.image.random_brightness(x, max_delta=0.08)
+    x = tf.image.random_contrast(x, lower=0.9, upper=1.1)
+    x = tf.clip_by_value(x, 0.0, 255.0)
+    return x, labels
+
+
+def _build_cost_matrix() -> tf.Tensor:
+    """
+    Ma trận chi phí cho loss có trọng số theo cặp nhầm lẫn.
+    - Đúng lớp: cost = 1.0
+    - la_sau -> la_khoe: phạt mạnh hơn để tăng recall lớp la_sau
+    - la_khoe -> la_sau: phạt nhẹ hơn vì bài toán ưu tiên cảnh báo sớm
+    """
+    n = len(CLASS_NAMES)
+    matrix = np.ones((n, n), dtype=np.float32)
+    np.fill_diagonal(matrix, 1.0)
+    matrix[LA_SAU_IDX, LA_KHOE_IDX] = 3.0
+    matrix[LA_KHOE_IDX, LA_SAU_IDX] = 1.3
+    return tf.constant(matrix, dtype=tf.float32)
+
+
+def _make_cost_sensitive_loss(cost_matrix: tf.Tensor):
+    """
+    Loss = sparse CCE * expected_cost.
+    expected_cost được tính mềm theo phân phối dự đoán để gradient ổn định:
+        expected_cost = sum_j cost[y_true, j] * p_j
+    """
+    base_loss = tf.keras.losses.SparseCategoricalCrossentropy(
+        reduction=tf.keras.losses.Reduction.NONE
+    )
+
+    def loss_fn(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
+        y_true = tf.cast(tf.reshape(y_true, [-1]), tf.int32)
+        ce = base_loss(y_true, y_pred)
+        row_costs = tf.gather(cost_matrix, y_true)  # [B, C]
+        expected_cost = tf.reduce_sum(row_costs * y_pred, axis=-1)  # [B]
+        return ce * expected_cost
+
+    return loss_fn
 
 
 def _count_train_images_per_class() -> dict[int, int]:
@@ -84,6 +204,8 @@ def _build_dataset_from_paths(paths: list[str], labels: list[int], shuffle: bool
     # Bỏ qua file ảnh lỗi/hỏng còn sót lại để không crash toàn bộ quá trình train.
     ds = ds.ignore_errors()
     ds = ds.batch(BATCH_SIZE)
+    if shuffle:
+        ds = ds.map(_augment_train_batch, num_parallel_calls=AUTOTUNE)
     return ds
 
 
@@ -181,6 +303,17 @@ def train():
     train_ds, val_ds, class_weight = load_datasets()
 
     model = build_vgg16_cbam_model()
+    cost_matrix = _build_cost_matrix()
+    cost_sensitive_loss = _make_cost_sensitive_loss(cost_matrix)
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(1e-4),
+        loss=cost_sensitive_loss,
+        metrics=[
+            "accuracy",
+            RecallLaSau(class_id=LA_SAU_IDX, name="recall_la_sau"),
+            PrecisionLaSau(class_id=LA_SAU_IDX, name="precision_la_sau"),
+        ],
+    )
     model.summary()
 
     # Callback: early stopping + lưu best weights
@@ -192,19 +325,67 @@ def train():
 
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         BEST_WEIGHTS_PATH,
-        monitor="val_accuracy",
+        monitor="val_recall_la_sau",
         save_best_only=True,
         save_weights_only=True,
+        mode="max",
         verbose=1,
     )
 
-    history = model.fit(
+    reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
+        monitor="val_loss",
+        factor=0.5,
+        patience=3,
+        min_lr=1e-6,
+        verbose=1,
+    )
+
+    print(f"\n=== Stage 1: train head với VGG16 frozen ({EPOCHS_STAGE1} epochs) ===")
+    history_stage1 = model.fit(
         train_ds,
         validation_data=val_ds,
-        epochs=EPOCHS,
-        callbacks=[early_stopping, checkpoint],
+        epochs=EPOCHS_STAGE1,
+        callbacks=[early_stopping, checkpoint, reduce_lr],
         class_weight=class_weight,
     )
+
+    # Stage 2: fine-tune block cuối VGG16 với LR thấp để cải thiện biên giữa la_khoe/la_sau.
+    print(f"\n=== Stage 2: fine-tune block5 VGG16 ({EPOCHS_STAGE2} epochs) ===")
+    vgg_layer = next((l for l in model.layers if "vgg" in l.name.lower()), None)
+    if vgg_layer is not None:
+        for layer in vgg_layer.layers:
+            layer.trainable = layer.name.startswith("block5")
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(2e-5),
+        loss=cost_sensitive_loss,
+        metrics=[
+            "accuracy",
+            RecallLaSau(class_id=LA_SAU_IDX, name="recall_la_sau"),
+            PrecisionLaSau(class_id=LA_SAU_IDX, name="precision_la_sau"),
+        ],
+    )
+
+    fine_tune_start = len(history_stage1.history.get("loss", []))
+    history_stage2 = model.fit(
+        train_ds,
+        validation_data=val_ds,
+        epochs=fine_tune_start + EPOCHS_STAGE2,
+        initial_epoch=fine_tune_start,
+        callbacks=[early_stopping, checkpoint, reduce_lr],
+        class_weight=class_weight,
+    )
+
+    # Gộp history của 2 stage để notebook vẽ đủ timeline.
+    merged_history: dict[str, list[float]] = {}
+    for k, v in history_stage1.history.items():
+        merged_history[k] = list(v)
+    for k, v in history_stage2.history.items():
+        merged_history.setdefault(k, [])
+        if len(merged_history[k]) < fine_tune_start:
+            merged_history[k].extend([float("nan")] * (fine_tune_start - len(merged_history[k])))
+        merged_history[k].extend(list(v))
+    history = tf.keras.callbacks.History()
+    history.history = merged_history
 
     save_training_history(history, HISTORY_JSON_PATH)
     print(f"Đã lưu biểu đồ huấn luyện (raw): {HISTORY_JSON_PATH}")

@@ -391,3 +391,28 @@ Pillow
 **Ngày tạo tài liệu**: [Điền ngày]
 **Người thực hiện**: [Điền tên]
 **Version**: 1.0
+Ảnh này mô tả pipeline model của bạn theo thứ tự từ trái sang phải:
+
+Input 224x224x3
+Ảnh đầu vào đã resize về 224x224, 3 kênh RGB.
+
+VGG16 (ImageNet) freeze
+Dùng VGG16 pretrained để trích xuất đặc trưng.
+freeze nghĩa là khóa backbone (không cập nhật trọng số VGG16 khi train), chỉ học phần head/CBAM phía sau.
+
+CBAM (Channel + Spatial)
+Attention module gồm 2 nhánh:
+
+Channel attention: học “kênh nào quan trọng”
+Spatial attention: học “vùng nào quan trọng” => giúp model tập trung vào vùng lá/bệnh hữu ích hơn.
+GAP (Global Average Pooling)
+Gom feature map 2D về vector 1D bằng cách lấy trung bình theo không gian.
+Mục tiêu: giảm số tham số, chống overfit, giữ thông tin tổng quát.
+
+Dense 256 + DO (Dropout)
+Lớp fully connected 256 nút để học decision boundary.
+DO là Dropout (trong code bạn là 0.4) để regularize.
+
+Softmax 5 classes
+Đầu ra xác suất cho 5 lớp (la_khoe, la_vang, la_sau, sau, co).
+Class dự đoán là class có xác suất cao nhất.

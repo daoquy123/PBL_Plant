@@ -1,0 +1,28 @@
+{
+  "model": "resnet50",
+  "weights": "D:\\Downloads\\PBL5\\app\\checkpoints\\resnet50_best.weights.h5",
+  "history": "D:\\Downloads\\PBL5\\app\\checkpoints\\resnet50_training_history.json",
+  "la_sau_threshold": 0.4700000000000001,
+  "test_samples": 314,
+  "accuracy": 0.8439490445859873,
+  "macro_f1": 0.8609241174509435,
+  "recall_la_sau": 0.7722772277227723,
+  "precision_la_sau": 0.8478260869565217,
+  "argmax_macro_f1": 0.8609013948323996,
+  "argmax_recall_la_sau": 0.7623762376237624,
+  "argmax_precision_la_sau": 0.8555555555555555,
+  "f1_per_class": {
+    "la_khoe": 0.7926267281105991,
+    "la_vang": 0.7037037037037037,
+    "la_sau": 0.8082901554404145,
+    "sau": 1.0,
+    "co": 1.0
+  },
+  "support_per_class": {
+    "la_khoe": 101,
+    "la_vang": 30,
+    "la_sau": 101,
+    "sau": 42,
+    "co": 40
+  }
+}

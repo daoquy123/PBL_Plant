@@ -1,5 +1,5 @@
 """
-Chuẩn hóa ảnh thô thành dataset train/val cho mô hình lá cải.
+Chuẩn hóa ảnh thô thành dataset train/val/test cho mô hình lá cải.
 
 Đầu vào:
   raw_images/
@@ -8,12 +8,13 @@ Chuẩn hóa ảnh thô thành dataset train/val cho mô hình lá cải.
     pest/
     yellow_pest/
 
-Đầu ra (đã resize, chia train/val theo tỉ lệ):
+Đầu ra (đã resize, chia train/val/test theo tỉ lệ):
   dataset/train/la_khoe/
   dataset/train/la_vang/
   dataset/train/la_sau/
   dataset/train/la_sau_va_vang/
   dataset/val/...
+  dataset/test/...
 """
 
 from pathlib import Path
@@ -36,11 +37,13 @@ MAP_RAW_TO_CLASS = {
     "yellow_pest": "la_sau_va_vang",
 }
 
-VAL_RATIO = 0.2  # 20% cho val
+TRAIN_RATIO = 0.6
+VAL_RATIO = 0.2
+TEST_RATIO = 0.2
 
 
 def ensure_dirs():
-    for split in ["train", "val"]:
+    for split in ["train", "val", "test"]:
         for cls in MAP_RAW_TO_CLASS.values():
             path = DATASET_ROOT / split / cls
             path.mkdir(parents=True, exist_ok=True)
@@ -89,11 +92,31 @@ def process_group(raw_group: str, class_name: str):
     print(f"{raw_group}: sau khi lọc trùng còn {len(files)} ảnh")
 
     random.shuffle(files)
-    n_val = int(len(files) * VAL_RATIO)
-    val_files = files[:n_val]
-    train_files = files[n_val:]
+    n_total = len(files)
+    n_train = int(n_total * TRAIN_RATIO)
+    n_val = int(n_total * VAL_RATIO)
+    n_test = n_total - n_train - n_val
 
-    for split, split_files in [("train", train_files), ("val", val_files)]:
+    # Giữ tập test đủ dữ liệu để đánh giá:
+    # nếu dữ liệu lớp có từ 3 ảnh trở lên thì cố giữ tối thiểu 1 ảnh test.
+    if n_total >= 3 and n_test == 0:
+        n_test = 1
+        if n_train > n_val:
+            n_train -= 1
+        elif n_val > 0:
+            n_val -= 1
+        else:
+            n_train = max(0, n_train - 1)
+
+    train_files = files[:n_train]
+    val_files = files[n_train : n_train + n_val]
+    test_files = files[n_train + n_val :]
+
+    for split, split_files in [
+        ("train", train_files),
+        ("val", val_files),
+        ("test", test_files),
+    ]:
         out_dir = DATASET_ROOT / split / class_name
         for idx, src in enumerate(split_files):
             dst = out_dir / f"{raw_group}_{idx:05d}.jpg"
@@ -101,6 +124,10 @@ def process_group(raw_group: str, class_name: str):
                 resize_and_save(src, dst)
             except Exception as e:
                 print(f"Lỗi với ảnh {src}: {e}")
+
+    print(
+        f"{raw_group}: train={len(train_files)}, val={len(val_files)}, test={len(test_files)}"
+    )
 
 
 def main():
