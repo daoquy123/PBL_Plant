@@ -1,6 +1,7 @@
 import math
 import os
 import random
+import argparse
 from pathlib import Path
 import numpy as np
 import tensorflow as tf
@@ -299,7 +300,18 @@ def load_datasets() -> tuple[tf.data.Dataset, tf.data.Dataset, dict[int, float]]
     return train_ds, val_ds, class_weight
 
 
-def train():
+def _set_global_seed(seed: int) -> None:
+    """Đồng bộ seed cho Python/NumPy/TensorFlow để tăng khả năng tái lập."""
+    global SPLIT_SEED
+    SPLIT_SEED = int(seed)
+    random.seed(SPLIT_SEED)
+    np.random.seed(SPLIT_SEED)
+    tf.random.set_seed(SPLIT_SEED)
+
+
+def train(seed: int = 123):
+    _set_global_seed(seed)
+    print(f"[SEED] SPLIT_SEED={SPLIT_SEED}")
     train_ds, val_ds, class_weight = load_datasets()
 
     model = build_vgg16_cbam_model()
@@ -404,6 +416,13 @@ def train():
     return model, history
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Train VGG16+CBAM")
+    parser.add_argument("--seed", type=int, default=123, help="Random seed cho split/shuffle/train")
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    model, history = train()
+    args = parse_args()
+    model, history = train(seed=args.seed)
 

@@ -257,6 +257,15 @@ def load_datasets() -> tuple[tf.data.Dataset, tf.data.Dataset, dict[int, float],
     return train_ds, val_ds, class_weight, train_steps, val_steps
 
 
+def _set_global_seed(seed: int) -> None:
+    """Đồng bộ seed cho Python/NumPy/TensorFlow để tăng khả năng tái lập."""
+    global SPLIT_SEED
+    SPLIT_SEED = int(seed)
+    random.seed(SPLIT_SEED)
+    np.random.seed(SPLIT_SEED)
+    tf.random.set_seed(SPLIT_SEED)
+
+
 def _build_paths(model_tag: str) -> tuple[str, str, str]:
     checkpoint_dir = os.path.join(PROJECT_ROOT, "checkpoints")
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -269,7 +278,9 @@ def _build_paths(model_tag: str) -> tuple[str, str, str]:
     )
 
 
-def train(use_cbam: bool = False):
+def train(use_cbam: bool = False, seed: int = 123):
+    _set_global_seed(seed)
+    print(f"[SEED] SPLIT_SEED={SPLIT_SEED}")
     model_tag = "resnet50_cbam" if use_cbam else "resnet50"
     best_weights_path, history_json_path, saved_model_path = _build_paths(model_tag)
     train_ds, val_ds, class_weight, train_steps, val_steps = load_datasets()
@@ -375,9 +386,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Bật CBAM trên top feature map của ResNet50",
     )
+    parser.add_argument("--seed", type=int, default=123, help="Random seed cho split/shuffle/train")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    model, history = train(use_cbam=args.use_cbam)
+    model, history = train(use_cbam=args.use_cbam, seed=args.seed)

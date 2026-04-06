@@ -13,5 +13,3 @@ __pycache__/
 *.tmp
 
 # Data and trained artifacts
-data test/
-models/

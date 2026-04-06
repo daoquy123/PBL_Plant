@@ -58,3 +58,20 @@ model.save_weights("models/leaf_vgg16_cbam_best.h5")
 
 Khi file này xuất hiện, server sẽ dùng trọng số đã huấn luyện để dự đoán.
 
+## Chạy nhiều random state + TB(std)
+
+Để chạy nhiều seed và tổng hợp các chỉ số theo dạng trung bình (độ lệch chuẩn):
+
+```bash
+python run_multiseed_tl_experiments.py --seeds 42,123,2024
+```
+
+Kết quả sẽ được lưu ở:
+
+- `reports/multi_seed_tl_summary.json`
+- `reports/MULTI_SEED_TL_SUMMARY.md`
+
+Trong đó `TL score` được định nghĩa:
+
+`TL score = 0.65 * f1_la_sau + 0.35 * macro_f1`
+
