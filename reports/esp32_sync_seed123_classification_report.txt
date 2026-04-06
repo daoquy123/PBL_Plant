@@ -1,0 +1,15 @@
+              precision    recall  f1-score   support
+
+     la_khoe     0.9915    0.9360    0.9630       125
+     la_vang     0.8800    0.8800    0.8800        25
+      la_sau     0.8281    0.9298    0.8760        57
+         sau     1.0000    1.0000    1.0000        42
+          co     1.0000    1.0000    1.0000        40
+
+    accuracy                         0.9481       289
+   macro avg     0.9399    0.9492    0.9438       289
+weighted avg     0.9521    0.9481    0.9491       289
+
+
+Accuracy: 0.9481
+Macro F1: 0.9438

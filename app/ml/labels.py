@@ -12,6 +12,15 @@ CLASS_LABELS_VI = {
     "co": "Cỏ / nền không phải lá cải (mẫu nhiễu)",
 }
 
+# Nhãn ngắn cho biểu đồ / slide (trục hoành F1, confusion matrix, …)
+CLASS_CHART_LABELS_VI = {
+    "la_khoe": "Lá khỏe",
+    "la_vang": "Lá vàng",
+    "la_sau": "Lá sâu",
+    "sau": "Côn trùng",
+    "co": "Cỏ",
+}
+
 EXPLANATIONS_VI = {
     "la_khoe": "Lá khỏe: màu xanh ổn định, không có vết sâu bệnh rõ rệt.",
     "la_vang": "Lá vàng: có thể thiếu dinh dưỡng, úng/khô, hoặc bệnh lý làm đổi màu.",

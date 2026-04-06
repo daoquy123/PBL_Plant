@@ -23,6 +23,7 @@ from model_vgg16_cbam import (
     IMG_SIZE as VGG_IMG_SIZE,
     build_vgg16_cbam_model,
 )
+from labels import CLASS_CHART_LABELS_VI
 from reporting import compute_gradcam, load_training_history, upsample_heatmap
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -34,6 +35,9 @@ REPORTS_DIR_DEFAULT = PROJECT_ROOT.parent / "reports"
 CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", ".tif", ".tiff", ".heic", ".heif"}
+
+def _display_labels_for_classes(class_names: list[str]) -> list[str]:
+    return [CLASS_CHART_LABELS_VI.get(name, name) for name in class_names]
 
 
 def _build_model(model_name: str) -> tuple[tf.keras.Model, list[str], tuple[int, int]]:
@@ -166,8 +170,9 @@ def _plot_loss_accuracy(history: dict[str, list[float]], out_path: Path, title_s
 
 
 def _plot_confusion_matrix(cm: np.ndarray, class_names: list[str], out_path: Path, title: str) -> None:
+    labels = _display_labels_for_classes(class_names)
     fig, ax = plt.subplots(figsize=(8.2, 6.6), dpi=140)
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", cbar=True, xticklabels=class_names, yticklabels=class_names, ax=ax)
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", cbar=True, xticklabels=labels, yticklabels=labels, ax=ax)
     ax.set_xlabel("Predicted")
     ax.set_ylabel("True")
     ax.set_title(title)
@@ -179,8 +184,12 @@ def _plot_confusion_matrix(cm: np.ndarray, class_names: list[str], out_path: Pat
 
 
 def _plot_f1_per_class(f1_per_class: np.ndarray, class_names: list[str], out_path: Path, title: str) -> None:
-    fig, ax = plt.subplots(figsize=(8.2, 4.8), dpi=140)
-    bars = ax.bar(class_names, f1_per_class, color="#4C78A8")
+    display = _display_labels_for_classes(class_names)
+    fig, ax = plt.subplots(figsize=(9.2, 4.8), dpi=140)
+    x = np.arange(len(display))
+    bars = ax.bar(x, f1_per_class, color="#4C78A8", width=0.65)
+    ax.set_xticks(x)
+    ax.set_xticklabels(display, rotation=0, ha="center")
     ax.set_ylim(0.0, 1.0)
     ax.set_ylabel("F1-score")
     ax.set_title(title)
