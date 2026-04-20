@@ -90,7 +90,7 @@ def build_vgg16_cbam_model(img_size=IMG_SIZE, num_classes: int = NUM_CLASSES):
     x = layers.Dropout(0.4)(x)
     x = layers.Dense(256, activation="relu")(x)
     x = layers.Dropout(0.4)(x)
-    outputs = layers.Dense(num_classes, activation="softmax")(x)
+    outputs = layers.Dense(num_classes, activation="softmax", dtype="float32")(x)
 
     model = models.Model(inputs, outputs)
     model.compile(

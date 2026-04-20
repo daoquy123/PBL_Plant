@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, UploadFile, File, HTTPException
+from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -17,18 +17,24 @@ async def index(request: Request):
 
 
 @app.post("/api/predict")
-async def api_predict(file: UploadFile = File(...)):
+async def api_predict(file: UploadFile = File(...), model: str = Form("vgg16")):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Vui lòng tải lên một file ảnh hợp lệ.")
 
     contents = await file.read()
     predictor = get_predictor()
-    result = predictor.predict(contents)
+    try:
+        result = predictor.predict(contents, model_name=model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return JSONResponse(
         {
             "status": "ok",
             "filename": file.filename,
+            "model": model,
             "result": result,
         }
     )

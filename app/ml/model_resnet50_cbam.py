@@ -75,7 +75,7 @@ def build_resnet50_model(
     x = layers.Dropout(0.4)(x)
     x = layers.Dense(256, activation="relu")(x)
     x = layers.Dropout(0.4)(x)
-    outputs = layers.Dense(num_classes, activation="softmax")(x)
+    outputs = layers.Dense(num_classes, activation="softmax", dtype="float32")(x)
 
     model = models.Model(inputs, outputs, name="resnet50_cbam" if use_cbam else "resnet50")
     model.compile(

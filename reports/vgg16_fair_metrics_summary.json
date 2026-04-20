@@ -1,0 +1,28 @@
+{
+  "model": "vgg16_cbam",
+  "weights": "app\\checkpoints\\vgg16_cbam_best.weights.h5",
+  "history": "app/checkpoints/training_history.json",
+  "la_sau_threshold": 0.43000000000000005,
+  "test_samples": 300,
+  "accuracy": 0.9633333333333334,
+  "macro_f1": 0.9531929824561403,
+  "recall_la_sau": 0.868421052631579,
+  "precision_la_sau": 0.8918918918918919,
+  "argmax_macro_f1": 0.9562443547948293,
+  "argmax_recall_la_sau": 0.868421052631579,
+  "argmax_precision_la_sau": 0.9166666666666666,
+  "f1_per_class": {
+    "la_khoe": 0.9736842105263158,
+    "la_vang": 0.9122807017543859,
+    "la_sau": 0.88,
+    "sau": 1.0,
+    "co": 1.0
+  },
+  "support_per_class": {
+    "la_khoe": 150,
+    "la_vang": 30,
+    "la_sau": 38,
+    "sau": 42,
+    "co": 40
+  }
+}

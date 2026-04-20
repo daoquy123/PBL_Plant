@@ -7,6 +7,7 @@ import numpy as np
 import tensorflow as tf
 
 from model_vgg16_cbam import build_vgg16_cbam_model, IMG_SIZE, CLASS_NAMES
+from tf_perf import configure_training_runtime, with_data_perf_options
 from reporting import save_training_history
 from image_io import load_image_rgb_from_path
 
@@ -280,10 +281,12 @@ def load_datasets() -> tuple[tf.data.Dataset, tf.data.Dataset, dict[int, float]]
     # (bao gồm HEIC/HEIF nếu môi trường có decoder tương ứng).
     val_paths_all, val_labels_all, _ = _collect_paths_from_split(VAL_DIR)
 
+    shuffle_buf = 4096
     if len(val_paths_all) > 0 and len(train_paths_all) > 0:
         train_ds = _build_dataset_from_paths(train_paths_all, train_labels_all, shuffle=True)
         val_ds = _build_dataset_from_paths(val_paths_all, val_labels_all, shuffle=False)
         print(f"Dùng trực tiếp TRAIN_DIR/VAL_DIR: train={len(train_paths_all)} ảnh, val={len(val_paths_all)} ảnh")
+        shuffle_buf = min(8192, max(1024, len(train_paths_all)))
     else:
         # Nếu VAL_DIR trống hoặc không có ảnh hợp lệ,
         # fallback: tách validation theo từng lớp từ TRAIN_DIR.
@@ -293,8 +296,9 @@ def load_datasets() -> tuple[tf.data.Dataset, tf.data.Dataset, dict[int, float]]
         )
         train_ds, val_ds = _stratified_split_from_train_dir()
 
-    # Tối ưu pipeline
-    train_ds = train_ds.cache().shuffle(1000, seed=SPLIT_SEED).prefetch(buffer_size=AUTOTUNE)
+    train_ds = with_data_perf_options(train_ds)
+    val_ds = with_data_perf_options(val_ds)
+    train_ds = train_ds.cache().shuffle(shuffle_buf, seed=SPLIT_SEED).prefetch(buffer_size=AUTOTUNE)
     val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)
 
     return train_ds, val_ds, class_weight
@@ -309,14 +313,39 @@ def _set_global_seed(seed: int) -> None:
     tf.random.set_seed(SPLIT_SEED)
 
 
-def train(seed: int = 123):
+def train(
+    seed: int = 123,
+    batch_size: int | None = None,
+    mixed_precision: bool = True,
+    xla: bool = True,
+):
+    global BATCH_SIZE
+    if batch_size is not None:
+        BATCH_SIZE = max(1, int(batch_size))
     _set_global_seed(seed)
     print(f"[SEED] SPLIT_SEED={SPLIT_SEED}")
+    perf = configure_training_runtime(mixed_precision=mixed_precision, xla=xla)
+    print(
+        "[PERF] "
+        f"physical_gpus={perf['physical_gpus']}, "
+        f"mixed_float16={perf['mixed_float16']}, "
+        f"xla_jit={perf['xla_jit']}"
+    )
+    print(f"[PERF] devices: {perf['devices_preview']}")
     train_ds, val_ds, class_weight = load_datasets()
 
     model = build_vgg16_cbam_model()
     cost_matrix = _build_cost_matrix()
-    cost_sensitive_loss = _make_cost_sensitive_loss(cost_matrix)
+    cost_sensitive_loss = _make_cost_sensitive_loss(cost_matrix)f1_la_sau: 0.8669 - val_loss: 0.4011 - val_precision_la_sau: 0.8639 - val_recall_la_sau: 0.8699 - learning_rate: 2.0000e-05
+Đã lưu biểu đồ huấn luyện (raw): /mnt/d/Downloads/PBL5/app/checkpoints/resnet50_training_history.json
+Full model: /mnt/d/Downloads/PBL5/app/saved_models/resnet50.keras
+
+Đã train xong. Best weights: /mnt/d/Downloads/PBL5/app/checkpoints/resnet50_best.weights.h5
+adminepchai@QuyChongGiang:/mnt/d/Downloads/PBL5/app/ml$ cp app/checkpoints/resnet50_training_history.json app/checkpoints/resnet50_seed124_history.json
+cp: cannot stat 'app/checkpoints/resnet50_training_history.json': No such file or directory
+adminepchai@QuyChongGiang:/mnt/d/Downloads/PBL5/app/ml$ cp app/checkpoints/resnet50_training_history.json app/checkpoints/resnet50_seed122_history.json
+cp: cannot stat 'app/checkpoints/resnet50_training_history.json': No such file or directory
+adminepchai@QuyChongGiang:/mnt/d/Downloads/PBL5/app/ml$
     model.compile(
         optimizer=tf.keras.optimizers.Adam(1e-4),
         loss=cost_sensitive_loss,
@@ -336,7 +365,7 @@ def train(seed: int = 123):
     )
 
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
-        BEST_WEIGHTS_PATH,
+        BEST_WEIGHTS_PATH,python train_resnet50.py --seed 124 --batch-size 48
         monitor="val_recall_la_sau",
         save_best_only=True,
         save_weights_only=True,
@@ -419,10 +448,28 @@ def train(seed: int = 123):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train VGG16+CBAM")
     parser.add_argument("--seed", type=int, default=123, help="Random seed cho split/shuffle/train")
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Batch size (mặc định 32; có GPU thường tăng 48–64 nếu vừa VRAM)",
+    )
+    parser.add_argument(
+        "--no-mixed-precision",
+        action="store_true",
+        help="Tắt mixed_float16 (khi có GPU). Mặc định bật nếu có GPU.",
+    )
+    parser.add_argument("--no-xla", action="store_true", help="Tắt XLA jit (mặc định bật)")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    model, history = train(seed=args.seed)
+    model, history = train(
+        seed=args.seed,
+        batch_size=args.batch_size,
+        mixed_precision=not args.no_mixed_precision,
+        xla=not args.no_xla,
+    )
 

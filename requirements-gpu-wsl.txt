@@ -1,0 +1,3 @@
+# Cài trong WSL2 (Ubuntu), driver NVIDIA trên Windows đã cài.
+# Không dùng cùng venv Windows pip tensorflow==2.16.1 (bản đó thường không thấy GPU).
+tensorflow[and-cuda]==2.16.1

@@ -1,0 +1,28 @@
+{
+  "model": "resnet50",
+  "weights": "app/checkpoints/resnet50_seed123_best.weights.h5",
+  "history": "app/checkpoints/resnet50_seed123_history.json",
+  "la_sau_threshold": 0.4800000000000001,
+  "test_samples": 300,
+  "accuracy": 0.9666666666666667,
+  "macro_f1": 0.9627685272145895,
+  "recall_la_sau": 0.868421052631579,
+  "precision_la_sau": 1.0,
+  "argmax_macro_f1": 0.9627685272145895,
+  "argmax_recall_la_sau": 0.868421052631579,
+  "argmax_precision_la_sau": 1.0,
+  "f1_per_class": {
+    "la_khoe": 0.967741935483871,
+    "la_vang": 0.9285714285714286,
+    "la_sau": 0.9295774647887324,
+    "sau": 0.9879518072289156,
+    "co": 1.0
+  },
+  "support_per_class": {
+    "la_khoe": 150,
+    "la_vang": 30,
+    "la_sau": 38,
+    "sau": 42,
+    "co": 40
+  }
+}
