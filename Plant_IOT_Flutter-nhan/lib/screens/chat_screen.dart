@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -59,7 +61,68 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('AI')),
+      appBar: AppBar(
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              'AI',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    height: 1.0,
+                  ),
+            ),
+            const SizedBox(width: 8),
+            PopupMenuButton<String>(
+              tooltip: 'Chọn model AI',
+              padding: EdgeInsets.zero,
+              initialValue: _selectedModel,
+              onSelected: chat.sending
+                  ? null
+                  : (value) {
+                      setState(() => _selectedModel = value);
+                    },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'vgg16',
+                  child: Text('VGG16'),
+                ),
+                PopupMenuItem(
+                  value: 'resnet',
+                  child: Text('ResNet'),
+                ),
+              ],
+              child: SizedBox(
+                height: 30,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: scheme.outline.withValues(alpha: 0.45)),
+                    color: scheme.surfaceContainerHighest,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        _selectedModel == 'vgg16' ? 'VGG16' : 'ResNet',
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              height: 1.0,
+                            ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.expand_more_rounded, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
       body: Column(
         children: [
           Expanded(
@@ -100,30 +163,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment<String>(
-                    value: 'vgg16',
-                    label: Text('VGG16'),
-                  ),
-                  ButtonSegment<String>(
-                    value: 'resnet',
-                    label: Text('ResNet'),
-                  ),
-                ],
-                selected: <String>{_selectedModel},
-                onSelectionChanged: chat.sending
-                    ? null
-                    : (set) {
-                        setState(() => _selectedModel = set.first);
-                      },
-              ),
-            ),
-          ),
           SizedBox(
             height: 44,
             child: ListView.separated(
@@ -224,7 +263,9 @@ class _ChatScreenState extends State<ChatScreen> {
                             : () async {
                                 final reply = await context
                                     .read<ChatProvider>()
-                                    .pickImageAndPredict();
+                                    .pickImageAndPredict(
+                                      model: _selectedModel,
+                                    );
                                 if (!context.mounted) return;
                                 if (reply != null && reply.trim().isNotEmpty) {
                                   context
@@ -377,6 +418,29 @@ class _Bubble extends StatelessWidget {
                     ),
               ),
               const SizedBox(height: 8),
+              if (message.localImagePath != null &&
+                  message.localImagePath!.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.file(
+                      File(message.localImagePath!),
+                      height: 140,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        height: 72,
+                        alignment: Alignment.center,
+                        color: scheme.surfaceContainerLow,
+                        child: Text(
+                          'Không tải được ảnh đính kèm',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               Text(
                 message.text,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
